@@ -1775,6 +1775,7 @@ static inline int perf_is_paranoid(void)
 }
 
 extern int perf_allow_kernel(void);
+extern int perf_allow_open(void);
 extern int perf_allow_cpu(void);
 extern int perf_allow_tracepoint(void);
 
