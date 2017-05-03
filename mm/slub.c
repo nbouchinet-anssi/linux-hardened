@@ -6341,13 +6341,16 @@ static noinline void warn_free_bad_obj(struct kmem_cache *s, void *obj)
 #endif
 
 	cachep = slab->slab_cache;
-
-	if (WARN_ONCE(cachep != s,
-			"kmem_cache_free(%s, %p): object belongs to different cache %s\n",
-			s->name, obj, cachep ? cachep->name : "(NULL)")) {
-		if (cachep)
-			print_tracking(cachep, obj);
+	if (cachep && cachep != s) {
+#ifdef CONFIG_BUG_ON_DATA_CORRUPTION
+		BUG();
+#else
+		WARN_ONCE(cachep != s,
+				"kmem_cache_free(%s, %p): object belongs to different cache %s\n",
+				s->name, obj, cachep ? cachep->name : "(NULL)");
+		print_tracking(cachep, obj);
 		return;
+#endif
 	}
 }
 
