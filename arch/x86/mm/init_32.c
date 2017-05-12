@@ -775,7 +775,38 @@ void __init mem_init(void)
 	test_wp_bit();
 }
 
-int kernel_set_to_readonly __read_mostly;
+#ifdef CONFIG_MEMORY_HOTPLUG
+int arch_add_memory(int nid, u64 start, u64 size,
+		    struct mhp_params *params)
+{
+	unsigned long start_pfn = start >> PAGE_SHIFT;
+	unsigned long nr_pages = size >> PAGE_SHIFT;
+	int ret;
+
+	/*
+	 * The page tables were already mapped at boot so if the caller
+	 * requests a different mapping type then we must change all the
+	 * pages with __set_memory_prot().
+	 */
+	if (params->pgprot.pgprot != PAGE_KERNEL.pgprot) {
+		ret = __set_memory_prot(start, nr_pages, params->pgprot);
+		if (ret)
+			return ret;
+	}
+
+	return __add_pages(nid, start_pfn, nr_pages, params);
+}
+
+void arch_remove_memory(u64 start, u64 size, struct vmem_altmap *altmap)
+{
+	unsigned long start_pfn = start >> PAGE_SHIFT;
+	unsigned long nr_pages = size >> PAGE_SHIFT;
+
+	__remove_pages(start_pfn, nr_pages, altmap);
+}
+#endif
+
+int kernel_set_to_readonly __ro_after_init;
 
 static void mark_nxdata_nx(void)
 {
@@ -799,11 +830,10 @@ void mark_rodata_ro(void)
 	unsigned long start = PFN_ALIGN(_text);
 	unsigned long size = (unsigned long)__end_rodata - start;
 
+	kernel_set_to_readonly = 1;
 	set_pages_ro(virt_to_page(start), size >> PAGE_SHIFT);
 	pr_info("Write protecting kernel text and read-only data: %luk\n",
 		size >> 10);
-
-	kernel_set_to_readonly = 1;
 
 #ifdef CONFIG_CPA_DEBUG
 	pr_info("Testing CPA: Reverting %lx-%lx\n", start, start + size);
