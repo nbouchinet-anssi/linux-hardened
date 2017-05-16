@@ -4590,6 +4590,7 @@ void swap_buf_le16(u16 *buf, unsigned int buf_words)
  */
 void ata_qc_free(struct ata_queued_cmd *qc)
 {
+	BUG_ON(qc == NULL); /* ata_qc_from_tag _might_ return NULL */
 	qc->flags = 0;
 	if (ata_tag_valid(qc->tag))
 		qc->tag = ATA_TAG_POISON;
@@ -4600,7 +4601,7 @@ void __ata_qc_complete(struct ata_queued_cmd *qc)
 	struct ata_port *ap;
 	struct ata_link *link;
 
-	WARN_ON_ONCE(qc == NULL); /* ata_qc_from_tag _might_ return NULL */
+	BUG_ON(qc == NULL); /* ata_qc_from_tag _might_ return NULL */
 	WARN_ON_ONCE(!(qc->flags & ATA_QCFLAG_ACTIVE));
 	ap = qc->ap;
 	link = qc->dev->link;
