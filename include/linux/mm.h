@@ -1009,6 +1009,7 @@ static inline void folio_set_compound_dtor(struct folio *folio,
 	VM_BUG_ON_FOLIO(compound_dtor >= NR_COMPOUND_DTORS, folio);
 	folio->_folio_dtor = compound_dtor;
 }
+compound_page_dtor *get_compound_page_dtor(struct folio *folio);
 
 void destroy_large_folio(struct folio *folio);
 
