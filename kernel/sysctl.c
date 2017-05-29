@@ -94,6 +94,9 @@
 #ifdef CONFIG_USER_NS
 #include <linux/user_namespace.h>
 #endif
+#if defined CONFIG_TTY
+#include <linux/tty.h>
+#endif
 
 #if defined(CONFIG_SYSCTL)
 
@@ -2112,6 +2115,17 @@ static struct ctl_table kern_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_doulongvec_minmax,
 	},
+#if defined CONFIG_TTY
+	{
+		.procname	= "tiocsti_restrict",
+		.data		= &tiocsti_restrict,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax_sysadmin,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+#endif
 	{
 		.procname	= "device_sidechannel_restrict",
 		.data		= &device_sidechannel_restrict,
