@@ -413,6 +413,9 @@ static inline void folio_set_order(struct folio *folio, unsigned int order)
 #endif
 }
 
+extern void __init __gather_extra_latent_entropy(struct page *page,
+						 unsigned int nr_pages);
+
 void folio_undo_large_rmappable(struct folio *folio);
 
 static inline void prep_compound_head(struct page *page, unsigned int order)
