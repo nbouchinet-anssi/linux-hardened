@@ -1940,6 +1940,39 @@ unsigned long __init node_map_pfn_alignment(void)
 	return ~accl_mask + 1;
 }
 
+static bool extra_latent_entropy __meminitdata;
+static int __init setup_extra_latent_entropy(char *str)
+{
+	extra_latent_entropy = true;
+	return 0;
+}
+early_param("extra_latent_entropy", setup_extra_latent_entropy);
+
+#ifdef CONFIG_GCC_PLUGIN_LATENT_ENTROPY
+volatile unsigned long latent_entropy __latent_entropy;
+EXPORT_SYMBOL(latent_entropy);
+#endif
+
+static void __init __gather_extra_latent_entropy(struct page *page,
+						 unsigned int nr_pages)
+{
+	if (extra_latent_entropy && !PageHighMem(page) && page_to_pfn(page) < 0x100000) {
+		unsigned long hash = 0;
+		size_t index, end = PAGE_SIZE * nr_pages / sizeof hash;
+		const unsigned long *data = lowmem_page_address(page);
+
+		for (index = 0; index < end; index++)
+			hash ^= hash + data[index];
+#ifdef CONFIG_GCC_PLUGIN_LATENT_ENTROPY
+		latent_entropy ^= hash;
+		add_device_randomness((const void *)&latent_entropy, sizeof(latent_entropy));
+#else
+		add_device_randomness((const void *)&hash, sizeof(hash));
+#endif
+	}
+}
+
+
 #ifdef CONFIG_DEFERRED_STRUCT_PAGE_INIT
 static void __init deferred_free_range(unsigned long pfn,
 				       unsigned long nr_pages)
@@ -1956,6 +1989,7 @@ static void __init deferred_free_range(unsigned long pfn,
 	if (nr_pages == MAX_ORDER_NR_PAGES && IS_MAX_ORDER_ALIGNED(pfn)) {
 		for (i = 0; i < nr_pages; i += pageblock_nr_pages)
 			set_pageblock_migratetype(page + i, MIGRATE_MOVABLE);
+		__gather_extra_latent_entropy(page, 1 << MAX_ORDER);
 		__free_pages_core(page, MAX_ORDER);
 		return;
 	}
@@ -1963,6 +1997,7 @@ static void __init deferred_free_range(unsigned long pfn,
 	for (i = 0; i < nr_pages; i++, page++, pfn++) {
 		if (pageblock_aligned(pfn))
 			set_pageblock_migratetype(page, MIGRATE_MOVABLE);
+		__gather_extra_latent_entropy(page, 1);
 		__free_pages_core(page, 0);
 	}
 }
@@ -2538,6 +2573,7 @@ void __init memblock_free_pages(struct page *page, unsigned long pfn,
 		/* KMSAN will take care of these pages. */
 		return;
 	}
+	__gather_extra_latent_entropy(page, 1 << order);
 	__free_pages_core(page, order);
 }
 
