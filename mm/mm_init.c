@@ -1927,6 +1927,7 @@ static void __init deferred_free_pages(unsigned long pfn,
 
 	/* Free a large naturally-aligned chunk if possible */
 	if (nr_pages == MAX_ORDER_NR_PAGES && IS_MAX_ORDER_ALIGNED(pfn)) {
+		__gather_extra_latent_entropy(page, 1 << MAX_PAGE_ORDER);
 		__free_pages_core(page, MAX_PAGE_ORDER, MEMINIT_EARLY);
 		return;
 	}
@@ -1934,8 +1935,10 @@ static void __init deferred_free_pages(unsigned long pfn,
 	/* Accept chunks smaller than MAX_PAGE_ORDER upfront */
 	accept_memory(PFN_PHYS(pfn), nr_pages * PAGE_SIZE);
 
-	for (i = 0; i < nr_pages; i++)
+	for (i = 0; i < nr_pages; i++) {
+		__gather_extra_latent_entropy(page + i, 1);
 		__free_pages_core(page + i, 0, MEMINIT_EARLY);
+	}
 }
 
 /* Completion tracking for deferred_init_memmap() threads */
@@ -2424,6 +2427,7 @@ void __init memblock_free_pages(unsigned long pfn, unsigned int order)
 
 	/* pages were reserved and not allocated */
 	clear_page_tag_ref(page);
+	__gather_extra_latent_entropy(page, 1 << order);
 	__free_pages_core(page, order, MEMINIT_EARLY);
 }
 
