@@ -11,7 +11,27 @@
 
 static const int ten_thousand = 10000;
 
-static int proc_dointvec_minmax_sysadmin(struct ctl_table *table, int write,
+/**
+ * proc_dointvec_minmax_sysadmin - read a vector of integers with min/max values
+ * checking CAP_SYS_ADMIN on write
+ * @table: the sysctl table
+ * @write: %TRUE if this is a write to the sysctl file
+ * @buffer: the user buffer
+ * @lenp: the size of the user buffer
+ * @ppos: file position
+ *
+ * Reads/writes up to table->maxlen/sizeof(unsigned int) integer
+ * values from/to the user buffer, treated as an ASCII string.
+ *
+ * This routine will ensure the values are within the range specified by
+ * table->extra1 (min) and table->extra2 (max).
+ *
+ * Writing is only allowed when the current task has CAP_SYS_ADMIN.
+ *
+ * Returns 0 on success, -EPERM on permission failure or -EINVAL on write
+ * when the range check fails.
+ */
+int proc_dointvec_minmax_sysadmin(struct ctl_table *table, int write,
 				void *buffer, size_t *lenp, loff_t *ppos)
 {
 	if (write && !capable(CAP_SYS_ADMIN))
