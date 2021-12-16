@@ -3637,8 +3637,12 @@ static inline void free_nonslab_page(struct page *page, void *object)
 {
 	unsigned int order = compound_order(page);
 
+#ifdef CONFIG_BUG_ON_DATA_CORRUPTION
+	BUG_ON(!PageCompound(page));
+#else
 	if (WARN_ON_ONCE(!PageCompound(page)))
 		pr_warn_once("object pointer: 0x%p\n", object);
+#endif
 
 	kfree_hook(object);
 	mod_lruvec_page_state(page, NR_SLAB_UNRECLAIMABLE_B, -(PAGE_SIZE << order));
