@@ -135,6 +135,8 @@
 /* Forced wake up if there is a waiter regardless of ->cq_wait_nr */
 #define IO_CQ_WAKE_FORCE	(IO_CQ_WAKE_INIT >> 1)
 
+#define IO_URING_MAX 2
+
 static void io_queue_sqe(struct io_kiocb *req, unsigned int extra_flags);
 static void __io_req_caches_free(struct io_ring_ctx *ctx);
 
@@ -143,8 +145,23 @@ static __read_mostly DEFINE_STATIC_KEY_FALSE(io_key_has_sqarray);
 struct kmem_cache *req_cachep;
 static struct workqueue_struct *iou_wq __ro_after_init;
 
-static int __read_mostly sysctl_io_uring_disabled;
+static int __read_mostly sysctl_io_uring_disabled = 1;
 static int __read_mostly sysctl_io_uring_group = -1;
+
+static int io_uring_dointvec_minmax(const struct ctl_table *table, int write,
+				void *buffer, size_t *lenp, loff_t *ppos)
+{
+	struct ctl_table table_copy;
+
+	/* Lock the max value if it ever gets set. */
+	table_copy = *table;
+	if (*(int *)table_copy.data == *(int *)table_copy.extra2)
+		table_copy.extra1 = table_copy.extra2;
+
+	return proc_dointvec_minmax(&table_copy, write, buffer, lenp, ppos);
+}
+
+static int io_uring_max = IO_URING_MAX;
 
 #ifdef CONFIG_SYSCTL
 static const struct ctl_table kernel_io_uring_disabled_table[] = {
@@ -153,9 +170,10 @@ static const struct ctl_table kernel_io_uring_disabled_table[] = {
 		.data		= &sysctl_io_uring_disabled,
 		.maxlen		= sizeof(sysctl_io_uring_disabled),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
+		/* Do not allow do go back if io_uring_disabled is set to 2 */
+		.proc_handler	= io_uring_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
-		.extra2		= SYSCTL_TWO,
+		.extra2		= &io_uring_max,
 	},
 	{
 		.procname	= "io_uring_group",
