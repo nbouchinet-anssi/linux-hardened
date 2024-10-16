@@ -51,6 +51,7 @@ TARGETS += kcmp
 TARGETS += kexec
 TARGETS += kselftest_harness
 TARGETS += kvm
+TARGETS += linux_hardened
 TARGETS += landlock
 TARGETS += lib
 TARGETS += livepatch
