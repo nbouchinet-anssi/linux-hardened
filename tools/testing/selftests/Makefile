@@ -46,6 +46,7 @@ TARGETS += ir
 TARGETS += kcmp
 TARGETS += kexec
 TARGETS += kvm
+TARGETS += linux_hardened
 TARGETS += landlock
 TARGETS += lib
 TARGETS += livepatch
