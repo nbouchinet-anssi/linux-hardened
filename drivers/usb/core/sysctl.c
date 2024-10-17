@@ -14,7 +14,6 @@ static struct ctl_table usb_sysctls[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE,
 	},
-	{ }
 };
 
 static struct ctl_table_header *usb_sysctl_table;
