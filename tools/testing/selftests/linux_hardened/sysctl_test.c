@@ -325,4 +325,113 @@ TEST_F(unprivileged_userns_clone, unshare)
  * io_uring tests.
  */
 
+
+/*
+ * tiocsti_restrict
+ */
+
+/*
+ * Copied from tty/tty_tstamp_update.c selftest
+ */
+#define MIN_TTY_PATH_LEN 8
+
+static bool tty_valid(char *tty)
+{
+	if (strlen(tty) < MIN_TTY_PATH_LEN)
+		return false;
+
+	if (strncmp(tty, "/dev/tty", MIN_TTY_PATH_LEN) == 0 ||
+	    strncmp(tty, "/dev/pts", MIN_TTY_PATH_LEN) == 0)
+		return true;
+
+	return false;
+}
+
+static int open_tty(struct __test_metadata *const _metadata)
+{
+	int fd;
+	char tty[PATH_MAX];
+
+	ASSERT_LE(-1, readlink("/proc/self/fd/0", tty, PATH_MAX));
+	if (!tty_valid(tty)) {
+		SKIP(return -1, "%s is not a valid tty", tty);
+	}
+	fd = open(tty, O_RDWR | O_CLOEXEC);
+	if (fd < 0) {
+		SKIP(return -1, "%s", strerror(errno));
+	}
+
+	return fd;
+}
+
+FIXTURE(tiocsti_restrict) {
+	int fd;
+	const char *sysctl_path;
+	char cur;
+};
+
+FIXTURE_VARIANT(tiocsti_restrict) {
+	char *authorized;
+};
+
+FIXTURE_VARIANT_ADD(tiocsti_restrict, disabled) {
+	.authorized = "1", // tiocsti_restrict denies when sysctl value is `1`.
+};
+
+FIXTURE_VARIANT_ADD(tiocsti_restrict, enabled) {
+	.authorized = "0",
+};
+
+FIXTURE_SETUP(tiocsti_restrict)
+{
+	check_user_id(0);
+	self->fd = open_sysctl(_metadata, PROCFS_DIR "/dev/tty/tiocsti_restrict");
+	ASSERT_EQ(0, lseek(self->fd, 0, SEEK_SET));
+	ASSERT_EQ(1, read(self->fd, &self->cur, 1));
+	ASSERT_EQ(0, lseek(self->fd, 0, SEEK_SET));
+	ASSERT_EQ(1, write(self->fd, variant->authorized, 1));
+
+	int fd;
+	char val = '1';
+	fd = open_sysctl(_metadata, PROCFS_DIR "/dev/tty/legacy_tiocsti");
+	ASSERT_EQ(0, lseek(fd, 0, SEEK_SET));
+	ASSERT_EQ(1, write(fd, &val, 1));
+	close(fd);
+}
+
+FIXTURE_TEARDOWN(tiocsti_restrict)
+{
+	ASSERT_EQ(0, lseek(self->fd, 0, SEEK_SET));
+	ASSERT_EQ(1, write(self->fd, &self->cur, 1));
+	close_sysctl_fd(_metadata, self->fd);
+
+	int fd;
+	char val = '0';
+	fd = open_sysctl(_metadata, PROCFS_DIR "/dev/tty/legacy_tiocsti");
+	ASSERT_EQ(0, lseek(self->fd, 0, SEEK_SET));
+	ASSERT_EQ(1, write(self->fd, &val , 1));
+	close(fd);
+}
+
+TEST_F(tiocsti_restrict, drop_cap)
+{
+	int fd;
+	char buf[128];
+
+	fd = open_tty(_metadata);
+	if (fd < 0) {
+		return;
+	}
+	ASSERT_LE(0, fd);
+	ASSERT_EQ(0, drop_cap_sys_admin());
+	bzero(&buf, sizeof(buf));
+	if (!atoi(variant->authorized)) {
+		ASSERT_EQ(0, ioctl(fd, TIOCSTI , &buf));
+	} else {
+		ASSERT_EQ(-1, ioctl(fd, TIOCSTI, &buf));
+		ASSERT_EQ(EPERM, errno);
+	}
+	ASSERT_EQ(0, set_cap_sys_admin());
+}
+
 TEST_HARNESS_MAIN
