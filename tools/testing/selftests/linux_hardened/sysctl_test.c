@@ -64,14 +64,6 @@ FIXTURE_VARIANT_ADD(sysctl, tiocsti_restrict) {
 	.sys_admin = 1,
 };
 
-FIXTURE_VARIANT_ADD(sysctl, device_sidechannel_restrict) {
-	.sysctl_path = PROCFS_DIR "/fs/device_sidechannel_restrict",
-	.default_value = '1',
-	.min = '0',
-	.max = '1',
-	.sys_admin = 1,
-};
-
 FIXTURE_VARIANT_ADD(sysctl, deny_new_usb) {
 	.sysctl_path = PROCFS_DIR "/kernel/deny_new_usb",
 	.default_value = '0',
@@ -158,7 +150,7 @@ TEST_F(sysctl, write_dec_oob)
 
 TEST_F(sysctl, drop_cap)
 {
-	ASSERT_EQ(0, drop_cap_sys_admin());
+	ASSERT_EQ(0, drop_cap(CAP_SYS_ADMIN));
 	if (variant->min < variant->max) {
 		char cur = variant->min;
 		while (cur++ < variant->max) {
@@ -174,7 +166,7 @@ TEST_F(sysctl, drop_cap)
 			}
 		}
 	}
-	ASSERT_EQ(0, set_cap_sys_admin());
+	ASSERT_EQ(0, set_cap(CAP_SYS_ADMIN));
 }
 
 TEST_F(sysctl, drop_uid)
@@ -325,6 +317,203 @@ TEST_F(unprivileged_userns_clone, unshare)
  * io_uring tests.
  */
 
+/*
+ * device_sidechannel_restrict tests.
+ */
+
+#include <sys/stat.h>
+#include <utime.h>
+#include <sys/sysmacros.h>
+
+FIXTURE_VARIANT_ADD(sysctl, device_sidechannel_restrict) {
+	.sysctl_path = PROCFS_DIR "/fs/device_sidechannel_restrict",
+	.default_value = '1',
+	.min = '0',
+	.max = '1',
+	.sys_admin = 1,
+};
+
+FIXTURE(device_timing_side_channel) {
+	int fd;
+	char cur;
+};
+
+FIXTURE_VARIANT(device_timing_side_channel) {
+	const char *const device_path;
+	bool cap_mknod;
+	bool privileged;
+	int major;
+	int minor;
+	char *enabled;
+};
+
+FIXTURE_VARIANT_ADD(device_timing_side_channel, block_privileged_enabled) {
+	.enabled = "1",
+	.device_path = "block_device",
+	.privileged = true,
+	.cap_mknod = true,
+	.major = 2,
+	.minor = 42,
+};
+
+FIXTURE_VARIANT_ADD(device_timing_side_channel, block_privileged_disabled) {
+	.enabled = "0",
+	.device_path = "block_device",
+	.privileged = true,
+	.cap_mknod = true,
+	.major = 2,
+	.minor = 42,
+};
+
+FIXTURE_VARIANT_ADD(device_timing_side_channel, block_no_cap_mknod_enabled) {
+	.enabled = "1",
+	.device_path = "block_device",
+	.privileged = true,
+	.cap_mknod = false,
+	.major = 2,
+	.minor = 42,
+};
+
+FIXTURE_VARIANT_ADD(device_timing_side_channel, block_no_cap_mknod_disabled) {
+	.enabled = "0",
+	.device_path = "block_device",
+	.privileged = true,
+	.cap_mknod = false,
+	.major = 2,
+	.minor = 42,
+};
+
+FIXTURE_VARIANT_ADD(device_timing_side_channel, block_unprivileged_enabled) {
+	.enabled = "1",
+	.device_path = "block_device",
+	.privileged = false,
+	.cap_mknod = false,
+	.major = 2,
+	.minor = 42,
+};
+
+FIXTURE_VARIANT_ADD(device_timing_side_channel, block_unprivileged_disabled) {
+	.enabled = "0",
+	.device_path = "block_device",
+	.privileged = false,
+	.cap_mknod = false,
+	.major = 2,
+	.minor = 42,
+};
+
+FIXTURE_VARIANT_ADD(device_timing_side_channel, char_privileged_enabled) {
+	.enabled = "1",
+	.device_path = "char_device",
+	.privileged = true,
+	.cap_mknod = true,
+	.major = 4,
+	.minor = 42,
+};
+
+FIXTURE_VARIANT_ADD(device_timing_side_channel, char_privileged_disabled) {
+	.enabled = "0",
+	.device_path = "char_device",
+	.privileged = true,
+	.cap_mknod = true,
+	.major = 4,
+	.minor = 42,
+};
+
+FIXTURE_VARIANT_ADD(device_timing_side_channel, char_no_cap_mknod_enabled) {
+	.enabled = "1",
+	.device_path = "char_device",
+	.privileged = true,
+	.cap_mknod = false,
+	.major = 4,
+	.minor = 42,
+};
+
+FIXTURE_VARIANT_ADD(device_timing_side_channel, char_no_cap_mknod_disabled) {
+	.enabled = "0",
+	.device_path = "char_device",
+	.privileged = true,
+	.cap_mknod = false,
+	.major = 4,
+	.minor = 42,
+};
+
+FIXTURE_VARIANT_ADD(device_timing_side_channel, char_unprivileged_enabled) {
+	.enabled = "1",
+	.device_path = "char_device",
+	.privileged = false,
+	.cap_mknod = false,
+	.major = 4,
+	.minor = 42,
+};
+
+FIXTURE_VARIANT_ADD(device_timing_side_channel, char_unprivileged_disabled) {
+	.enabled = "0",
+	.device_path = "char_device",
+	.privileged = false,
+	.cap_mknod = false,
+	.major = 4,
+	.minor = 42,
+};
+
+FIXTURE_SETUP(device_timing_side_channel)
+{
+
+	self->fd = open_sysctl(_metadata, PROCFS_DIR "/fs/device_sidechannel_restrict");
+	ASSERT_EQ(0, lseek(self->fd, 0, SEEK_SET));
+	ASSERT_EQ(1, read(self->fd, &self->cur, 1));
+	ASSERT_EQ(0, lseek(self->fd, 0, SEEK_SET));
+	ASSERT_EQ(1, write(self->fd, variant->enabled, 1));
+
+	struct utimbuf timebuf = {
+		.actime = 21000,
+		.modtime = 42000,
+	};
+	if (!access(variant->device_path, F_OK))
+		ASSERT_EQ(0, unlink(variant->device_path));
+	dev_t device_id = makedev(variant->major, variant->minor);
+	ASSERT_EQ(0, mknod(variant->device_path, S_IFCHR, device_id));
+	ASSERT_EQ(0, chmod(variant->device_path, S_IRUSR | S_IWUSR | S_IRWXO | S_IROTH | S_IWOTH));
+	ASSERT_EQ(0, utime(variant->device_path, &timebuf));
+
+	if (variant->privileged)
+		check_user_id(0);
+	else
+		ASSERT_EQ(0, setresuid(-1, 1000, -1));
+	if (!variant->cap_mknod)
+		drop_cap(CAP_MKNOD);
+}
+
+FIXTURE_TEARDOWN(device_timing_side_channel)
+{
+	if (!variant->cap_mknod)
+		set_cap(CAP_MKNOD);
+	ASSERT_EQ(0, setresuid(-1, 0, -1));
+	if (!access(variant->device_path, F_OK))
+		ASSERT_EQ(0, unlink(variant->device_path));
+	ASSERT_EQ(0, lseek(self->fd, 0, SEEK_SET));
+	ASSERT_EQ(1, write(self->fd, &self->cur, 1));
+	close_sysctl_fd(_metadata, self->fd);
+}
+
+TEST_F(device_timing_side_channel, stat)
+{
+	struct stat statbuf;
+
+	ASSERT_EQ(0, stat(variant->device_path, &statbuf));
+
+	if (atoi(variant->enabled) && !variant->cap_mknod) {
+		ASSERT_EQ(statbuf.st_ctime, statbuf.st_atime);
+		ASSERT_EQ(statbuf.st_ctime, statbuf.st_mtime);
+	} else {
+		ASSERT_NE(statbuf.st_ctime, statbuf.st_atime);
+		ASSERT_NE(statbuf.st_ctime, statbuf.st_mtime);
+	}
+}
+
+// TODO Add inotify IN_MODIFY, IN_CHANGE and IN_ACCESS tests.
+//TEST_F(device_timing_side_channel, notify)
+//{
+//}
 
 /*
  * tiocsti_restrict
@@ -347,6 +536,8 @@ static bool tty_valid(char *tty)
 	return false;
 }
 
+//FIXME If VM is executed through vng without a dynamic shell, /proc/self/fd/0 links to a vport device, which is not a valid tty.
+//The test is thus skipped.
 static int open_tty(struct __test_metadata *const _metadata)
 {
 	int fd;
@@ -410,7 +601,7 @@ TEST_F(tiocsti_restrict, drop_cap)
 		return;
 	}
 	ASSERT_LE(0, fd);
-	ASSERT_EQ(0, drop_cap_sys_admin());
+	ASSERT_EQ(0, drop_cap(CAP_SYS_ADMIN));
 	bzero(&buf, sizeof(buf));
 	if (!atoi(variant->authorized)) {
 		ASSERT_EQ(0, ioctl(fd, TIOCSTI , &buf));
@@ -418,7 +609,7 @@ TEST_F(tiocsti_restrict, drop_cap)
 		ASSERT_EQ(-1, ioctl(fd, TIOCSTI, &buf));
 		ASSERT_EQ(EPERM, errno);
 	}
-	ASSERT_EQ(0, set_cap_sys_admin());
+	ASSERT_EQ(0, set_cap(CAP_SYS_ADMIN));
 }
 
 TEST_HARNESS_MAIN
