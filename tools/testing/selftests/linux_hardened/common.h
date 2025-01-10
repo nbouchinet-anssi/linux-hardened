@@ -46,7 +46,7 @@ static pid_t clone3(struct clone_args *args, size_t size)
 	return syscall(__NR_clone3, args, size);
 }
 
-static int drop_cap_sys_admin()
+static int drop_cap(int capability)
 {
 	cap_t caps = cap_get_proc();
 	cap_value_t cap_list[CAP_LAST_CAP + 1];
@@ -54,7 +54,7 @@ static int drop_cap_sys_admin()
 	if (caps == NULL)
 		return -1;
 
-	cap_list[0] = CAP_SYS_ADMIN;
+	cap_list[0] = capability;
 	if (cap_set_flag(caps, CAP_EFFECTIVE, 1, cap_list, CAP_CLEAR) < 0) {
 		cap_free(caps);
 		return -1;
@@ -69,7 +69,7 @@ static int drop_cap_sys_admin()
 	return 0;
 }
 
-static int set_cap_sys_admin()
+static int set_cap(int capability)
 {
 	cap_t caps = cap_get_proc();
 	cap_value_t cap_list[CAP_LAST_CAP + 1];
@@ -77,7 +77,7 @@ static int set_cap_sys_admin()
 	if (caps == NULL)
 		return -1;
 
-	cap_list[0] = CAP_SYS_ADMIN;
+	cap_list[0] = capability;
 	if (cap_set_flag(caps, CAP_EFFECTIVE, 1, cap_list, CAP_SET) < 0) {
 		cap_free(caps);
 		return -1;
