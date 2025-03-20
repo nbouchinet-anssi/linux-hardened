@@ -5,6 +5,10 @@
 
 #include "../kselftest_harness.h"
 
+#include <fcntl.h>
+#include <sys/fanotify.h>
+#include <sys/inotify.h>
+#include <poll.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/capability.h>
@@ -94,4 +98,67 @@ static int set_cap(int capability)
 
 static int dummy(void *arg){
 	return 0;
+}
+
+/*
+ *  Inotify utils
+ */
+
+
+static int inotify_prepare_for_wait(const char *path)
+{
+	int fd, ret = -1;
+
+	fd = inotify_init1(0);
+	if (fd == -1)
+		return fd;
+
+	ret = inotify_add_watch(fd, path, IN_MODIFY | IN_ACCESS);
+	if (ret == -1) {
+		close(fd);
+		fd = -1;
+	}
+
+	return fd;
+}
+
+//static int fanotify_prepare_for_wait(const char *path)
+//{
+//	int fd, ret = -1;
+//
+//	fd = fanotify_init(0);
+//	if (fd == -1)
+//		return fd;
+//
+//	ret = fanotify_mark(fd, IN_MODIFY | IN_ACCESS, path);
+//	if (ret == -1) {
+//		close(fd);
+//		fd = -1;
+//	}
+//
+//	return fd;
+//}
+
+static int wait_for_event(int fd)
+{
+	int ret = -1;
+	struct pollfd fds = {
+		.fd = fd,
+		.events = POLLIN,
+	};
+
+	while (true) {
+		ret = poll(&fds, 1, 10);
+
+		if (ret == -1) {
+			if (errno == EINTR)
+				continue;
+			break;
+		}
+		if (ret > 0)
+			return 1;
+		if (ret == 0)
+			return 0;
+	}
+	return ret;
 }
