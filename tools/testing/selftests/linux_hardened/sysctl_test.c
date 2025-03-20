@@ -516,9 +516,62 @@ TEST_F(device_timing_side_channel, stat)
 	}
 }
 
-// TODO Add inotify IN_MODIFY, IN_CHANGE and IN_ACCESS tests.
-//TEST_F(device_timing_side_channel, notify)
+TEST_F(device_timing_side_channel, inotify)
+{
+	if (!strcmp(variant->device_path, "char_device") && variant->privileged) {
+		int fd, wfd, ret = -1;
+		char c = '1';
+
+		wfd = inotify_prepare_for_wait(variant->device_path);
+
+		pid_t pid = fork();
+
+		if (pid < 0) {
+			ksft_exit_fail_perror("fork");
+		} else if (pid == 0) {
+			ret = wait_for_event(wfd);
+			exit(ret);
+		} else {
+			fd = open_or_die(variant->device_path, O_RDWR);
+			write(fd, &c, 1);
+			ASSERT_EQ(pid, waitpid(pid, &ret, 0));
+		}
+		ret = WEXITSTATUS(ret);
+		if (atoi(variant->enabled)) {
+			ASSERT_EQ(0, ret);
+		} else {
+			ASSERT_EQ(1, ret);
+		}
+	}
+}
+
+//TEST_F(device_timing_side_channel, fanotify)
 //{
+//	if (!strcmp(variant->device_path, "char_device") && variant->privileged) {
+//		int fd, wfd, ret = -1;
+//		char c = '1';
+//
+//		wfd = fanotify_prepare_for_wait(variant->device_path);
+//
+//		pid_t pid = fork();
+//
+//		if (pid < 0) {
+//			ksft_exit_fail_perror("fork");
+//		} else if (pid == 0) {
+//			ret = wait_for_event(wfd);
+//			exit(ret);
+//		} else {
+//			fd = open_or_die(variant->device_path, O_RDWR);
+//			write(fd, &c, 1);
+//			ASSERT_EQ(pid, waitpid(pid, &ret, 0));
+//		}
+//		ret = WEXITSTATUS(ret);
+//		if (atoi(variant->enabled)) {
+//			ASSERT_EQ(0, ret);
+//		} else {
+//			ASSERT_EQ(1, ret);
+//		}
+//	}
 //}
 
 /*
