@@ -920,10 +920,28 @@ static inline void set_canary(struct kmem_cache *s, void *object, unsigned long 
 	*canary = get_canary_value(canary, value);
 }
 
+static inline void print_canary_value(char *function_name, struct kmem_cache *s, void * object, unsigned long value) 
+{
+	unsigned long *canary = get_canary(s, object);
+
+	early_printk("------------[ %s ]------------\n", function_name);
+	early_printk("check_canary (%s): with address %p\n\tSupposed value : %lx\n\tValue in object : %lx\n",
+	s->name, object, get_canary_value(canary, value), *canary);
+
+	early_printk("\tget_canary_value_with_random_active = %lx\n\tget_canary_value_with_random_inactive = %lx\n\tget_canary_value_with_sheaf_random_active = %lx\n",
+	get_canary_value(canary, s->random_active),
+	get_canary_value(canary, s->random_inactive),
+        get_canary_value(canary, s->sheaf_random_active));
+}
+
 static inline void check_canary(struct kmem_cache *s, void *object, unsigned long value)
 {
 	unsigned long *canary = get_canary(s, object);
-	BUG_ON(*canary != get_canary_value(canary, value));
+
+	if (*canary != get_canary_value(canary, value)) {
+		print_canary_value("check_canary", s, object, value);
+		BUG_ON(*canary != get_canary_value(canary, value));
+	}
 }
 
 static inline void check_set_canary_bulk(struct kmem_cache *s, unsigned int size, void **objects, unsigned long check_value, unsigned long set_value)
