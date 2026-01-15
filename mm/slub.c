@@ -878,6 +878,8 @@ static inline void set_orig_size(struct kmem_cache *s,
 		return;
 
 	p += get_info_end(s);
+	if (IS_ENABLED(CONFIG_SLAB_CANARY))
+		p = (void *)p + sizeof(void *);
 	p += sizeof(struct track) * 2;
 
 	*(unsigned int *)p = orig_size;
@@ -894,6 +896,8 @@ static inline unsigned int get_orig_size(struct kmem_cache *s, void *object)
 		return s->object_size;
 
 	p += get_info_end(s);
+	if (IS_ENABLED(CONFIG_SLAB_CANARY))
+		p = (void *)p + sizeof(void *);
 	p += sizeof(struct track) * 2;
 
 	return *(unsigned int *)p;
@@ -2593,8 +2597,14 @@ bool slab_free_hook(struct kmem_cache *s, void *x, bool init,
 		if (!kasan_has_integrated_init())
 			memset(kasan_reset_tag(x), 0, orig_size);
 		rsize = (s->flags & SLAB_RED_ZONE) ? s->red_left_pad : 0;
+
+#ifdef CONFIG_SLAB_CANARY
+		memset((char *)kasan_reset_tag(x) + inuse + sizeof(void *), 0,
+		       s->size - inuse - sizeof(void *) - rsize);
+#else
 		memset((char *)kasan_reset_tag(x) + inuse, 0,
 		       s->size - inuse - rsize);
+#endif
 		/*
 		 * Restore orig_size, otherwise kmalloc redzone overwritten
 		 * would be reported
