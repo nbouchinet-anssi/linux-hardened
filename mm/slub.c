@@ -5481,6 +5481,12 @@ static __fastpath_inline void *slab_alloc_node(struct kmem_cache *s, struct list
 		init = slab_want_init_on_alloc(gfpflags, s);
 	}
 
+	/*
+	 * linux-hardened: In the scenario where an object is intended to be allocated
+	 * from a sheaf but it's allocation failed, it is instead directly allocated from the
+	 * slab allocator but will later be freed back to a sheaf. We thus need to
+	 * set the canary to a sheaf_random_active.
+	 */
 	if (object && !from_pcs) {
 		check_canary(s, object, s->random_inactive);
 		set_canary(s, object, s->random_active);
@@ -6946,6 +6952,7 @@ void slab_free(struct kmem_cache *s, struct slab *slab, void *object,
 	       unsigned long addr)
 {
 	bool canary = true;
+	bool to_sheaf = false;
 
 	memcg_slab_free_hook(s, slab, &object, 1);
 	alloc_tagging_slab_free_hook(s, slab, &object, 1);
@@ -6966,8 +6973,19 @@ void slab_free(struct kmem_cache *s, struct slab *slab, void *object,
 	if (s->cpu_sheaves && likely(!IS_ENABLED(CONFIG_NUMA) ||
 				     slab_nid(slab) == numa_mem_id())
 			   && likely(!slab_test_pfmemalloc(slab))) {
+		to_sheaf = true;
 		if (likely(free_to_pcs(s, object)))
 			return;
+	}
+
+	/*
+	 * linux-hardened: In this scenario, the object was intended to be freed to a
+	 * sheaf but it failed. The object will thus be freed back to the slab allocator,
+	 * the canary thus need to be checked as a sheaf one and set back to a slab inactive one.
+	 */
+	if (to_sheaf && canary) {
+		check_canary(s, object, s->sheaf_random_active);
+		set_canary(s, object, s->random_inactive);
 	}
 
 	do_slab_free(s, slab, object, object, 1, addr);
@@ -8934,7 +8952,10 @@ int do_kmem_cache_create(struct kmem_cache *s, const char *name,
 #ifdef CONFIG_SLAB_CANARY
 	s->random_active = get_random_long();
 	s->random_inactive = get_random_long();
-	s->sheaf_random_active = get_random_long();
+	if (__slub_debug_enabled())
+		s->sheaf_random_active = s->random_active;
+	else
+		s->sheaf_random_active = get_random_long();
 #endif
 	s->align = args->align;
 	s->ctor = args->ctor;
