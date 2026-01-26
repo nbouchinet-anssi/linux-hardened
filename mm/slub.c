@@ -7716,7 +7716,7 @@ error:
 int kmem_cache_alloc_bulk_noprof(struct kmem_cache *s, gfp_t flags, size_t size,
 				 void **p)
 {
-	unsigned int i;
+	unsigned int i = 0;
 	bool init = false;
 
 	if (!size)
