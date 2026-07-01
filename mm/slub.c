@@ -3074,7 +3074,7 @@ static void sheaf_flush_unused(struct kmem_cache *s, struct slab_sheaf *sheaf)
 }
 
 static bool __rcu_free_sheaf_prepare(struct kmem_cache *s,
-				     struct slab_sheaf *sheaf, bool canary)
+				     struct slab_sheaf *sheaf)
 {
 	bool init = slab_want_init_on_free(s);
 	void **p = &sheaf->objects[0];
@@ -3087,7 +3087,7 @@ static bool __rcu_free_sheaf_prepare(struct kmem_cache *s,
 		memcg_slab_free_hook(s, slab, p + i, 1);
 		alloc_tagging_slab_free_hook(s, slab, p + i, 1);
 
-		if (unlikely(!slab_free_hook(s, p[i], init, true, canary))) {
+		if (unlikely(!slab_free_hook(s, p[i], init, true, false))) {
 			p[i] = p[--sheaf->size];
 			continue;
 		}
@@ -3113,7 +3113,7 @@ static void rcu_free_sheaf_nobarn(struct rcu_head *head)
 	 * linux-hardened: Sheaf flushing, sheaf object canaries
 	 * goes from sheaf_random_inactive to random_inactive.
 	 */
-	__rcu_free_sheaf_prepare(s, sheaf, false);
+	__rcu_free_sheaf_prepare(s, sheaf);
 
 	sheaf_flush_unused(s, sheaf);
 
@@ -6029,7 +6029,7 @@ static void rcu_free_sheaf(struct rcu_head *head)
 	 * If it returns true, there was at least one object from pfmemalloc
 	 * slab so simply flush everything.
 	 */
-	if (__rcu_free_sheaf_prepare(s, sheaf, false))
+	if (__rcu_free_sheaf_prepare(s, sheaf))
 		goto flush;
 
 	barn = get_barn_node(s, sheaf->node);
