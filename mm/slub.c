@@ -3060,15 +3060,14 @@ static bool sheaf_try_flush_main(struct kmem_cache *s)
  * necessary when flushing cpu's sheaves (both spare and main) during cpu
  * hotremove as the cpu is not executing anymore.
  */
-static void sheaf_flush_unused(struct kmem_cache *s, struct slab_sheaf *sheaf, bool canary)
+static void sheaf_flush_unused(struct kmem_cache *s, struct slab_sheaf *sheaf)
 {
 	if (!sheaf->size)
 		return;
 
 	stat_add(s, SHEAF_FLUSH, sheaf->size);
 
-	if (canary)
-		check_set_canary_bulk(s, sheaf->size, &sheaf->objects[0], s->sheaf_random_inactive, s->random_inactive);
+	check_set_canary_bulk(s, sheaf->size, &sheaf->objects[0], s->sheaf_random_inactive, s->random_inactive);
 	__kmem_cache_free_bulk(s, sheaf->size, &sheaf->objects[0]);
 
 	sheaf->size = 0;
@@ -3116,7 +3115,7 @@ static void rcu_free_sheaf_nobarn(struct rcu_head *head)
 	 */
 	__rcu_free_sheaf_prepare(s, sheaf, false);
 
-	sheaf_flush_unused(s, sheaf, true);
+	sheaf_flush_unused(s, sheaf);
 
 	free_empty_sheaf(s, sheaf);
 }
@@ -3147,7 +3146,7 @@ static void pcs_flush_all(struct kmem_cache *s)
 	local_unlock(&s->cpu_sheaves->lock);
 
 	if (spare) {
-		sheaf_flush_unused(s, spare, true);
+		sheaf_flush_unused(s, spare);
 		free_empty_sheaf(s, spare);
 	}
 
@@ -3164,9 +3163,9 @@ static void __pcs_flush_all_cpu(struct kmem_cache *s, unsigned int cpu)
 	pcs = per_cpu_ptr(s->cpu_sheaves, cpu);
 
 	/* The cpu is not executing anymore so we don't need pcs->lock */
-	sheaf_flush_unused(s, pcs->main, true);
+	sheaf_flush_unused(s, pcs->main);
 	if (pcs->spare) {
-		sheaf_flush_unused(s, pcs->spare, true);
+		sheaf_flush_unused(s, pcs->spare);
 		free_empty_sheaf(s, pcs->spare);
 		pcs->spare = NULL;
 	}
@@ -3405,7 +3404,7 @@ static void barn_shrink(struct kmem_cache *s, struct node_barn *barn)
 	spin_unlock_irqrestore(&barn->lock, flags);
 
 	list_for_each_entry_safe(sheaf, sheaf2, &full_list, barn_list) {
-		sheaf_flush_unused(s, sheaf, true);
+		sheaf_flush_unused(s, sheaf);
 		free_empty_sheaf(s, sheaf);
 	}
 
@@ -4811,7 +4810,7 @@ __pcs_replace_empty_main(struct kmem_cache *s, struct slub_percpu_sheaves *pcs, 
 		 * we must be very low on memory so don't bother
 		 * with the barn
 		 */
-		sheaf_flush_unused(s, empty, true);
+		sheaf_flush_unused(s, empty);
 		free_empty_sheaf(s, empty);
 
 		return NULL;
@@ -5233,7 +5232,7 @@ kmem_cache_prefill_sheaf(struct kmem_cache *s, gfp_t gfp, unsigned int size)
 
 		if (sheaf->size < size &&
 		    __prefill_sheaf_pfmemalloc(s, sheaf, gfp)) {
-			sheaf_flush_unused(s, sheaf, true);
+			sheaf_flush_unused(s, sheaf);
 			free_empty_sheaf(s, sheaf);
 			sheaf = NULL;
 		}
@@ -5260,7 +5259,7 @@ void kmem_cache_return_sheaf(struct kmem_cache *s, gfp_t gfp,
 
 	if (unlikely((sheaf->capacity != s->sheaf_capacity)
 		     || sheaf->pfmemalloc)) {
-		sheaf_flush_unused(s, sheaf, true);
+		sheaf_flush_unused(s, sheaf);
 		kfree(sheaf);
 		return;
 	}
@@ -5288,7 +5287,7 @@ void kmem_cache_return_sheaf(struct kmem_cache *s, gfp_t gfp,
 	 */
 	if (!barn || data_race(barn->nr_full) >= MAX_FULL_SHEAVES ||
 	    refill_sheaf(s, sheaf, gfp)) {
-		sheaf_flush_unused(s, sheaf, true);
+		sheaf_flush_unused(s, sheaf);
 		free_empty_sheaf(s, sheaf);
 		return;
 	}
@@ -5917,7 +5916,7 @@ restart:
 		pcs->spare = NULL;
 		local_unlock(&s->cpu_sheaves->lock);
 
-		sheaf_flush_unused(s, to_flush, true);
+		sheaf_flush_unused(s, to_flush);
 		empty = to_flush;
 		goto got_empty;
 	}
@@ -6055,7 +6054,7 @@ static void rcu_free_sheaf(struct rcu_head *head)
 
 flush:
 	stat(s, BARN_PUT_FAIL);
-	sheaf_flush_unused(s, sheaf, true);
+	sheaf_flush_unused(s, sheaf);
 
 empty:
 	if (barn && data_race(barn->nr_empty) < MAX_EMPTY_SHEAVES) {
